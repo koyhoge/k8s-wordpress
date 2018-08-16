@@ -1,0 +1,49 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: k8s-wordpress
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+        # [START proxy_container]
+        - name: cloudsql-proxy
+          image: gcr.io/cloudsql-docker/gce-proxy:1.11
+          command: ["/cloud_sql_proxy", "-dir=/cloudsql",
+            "-instances=wordpress-experiment-koyhoge:asia-northeast1:univ-wordpress=tcp:3306",
+            "-credential_file=/secrets/cloudsql/credentials.json"]
+          volumeMounts:
+          - name: cloudsql-instance-credentials
+            mountPath: /secrets/cloudsql
+            readOnly: true
+          - name: ssl-certs
+            mountPath: /etc/ssl/certs
+          - name: cloudsql
+            mountPath: /cloudsql
+        # [END proxy_container]
+        - name: wordpress
+          image: gcr.io/wordpress-experiment-koyhoge/wpgke:latest
+          # image: wordpress:latest
+          ports:
+          - containerPort: 80
+          env:
+          - name: WORDPRESS_DB_HOST
+            value: 127.0.0.1:3306
+          - name: WORDPRESS_DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: cloudsql-db-credentials
+                key: username
+      volumes:
+      - name: cloudsql-instance-credentials
+        secret:
+          secretName: cloudsql-instance-credentials
+      - name: ssl-certs
+        hostPath:
+          path: /etc/ssl/certs
+      - name: cloudsql
+        emptyDir:
